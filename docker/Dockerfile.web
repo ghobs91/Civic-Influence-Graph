@@ -1,11 +1,13 @@
 FROM node:20-slim AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
+COPY packages/schema/package.json packages/schema/
 COPY web/package.json web/
-RUN npm install --workspace=web
+RUN npm install --workspace=@cig/schema --workspace=web
 COPY tsconfig.json ./
+COPY packages/schema/ packages/schema/
 COPY web/ web/
-RUN npm run build --workspace=web
+RUN npm run build --workspace=@cig/schema && npm run build --workspace=web
 
 FROM node:20-slim
 WORKDIR /app
