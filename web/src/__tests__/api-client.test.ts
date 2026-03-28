@@ -17,6 +17,10 @@ function mockFetch(body: unknown, status = 200) {
   });
 }
 
+function parseFetchUrl(fetchMock: ReturnType<typeof vi.fn>) {
+  return new URL(fetchMock.mock.calls[0][0], 'http://localhost');
+}
+
 const meta = {
   request_id: '00000000-0000-0000-0000-000000000001',
   timestamp: '2025-01-01T00:00:00Z',
@@ -45,7 +49,7 @@ describe('api-client', () => {
       expect(res.data.results).toHaveLength(1);
       expect(res.data.results[0].canonical_name).toBe('Test');
 
-      const url = new URL((fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+      const url = parseFetchUrl(fetch as ReturnType<typeof vi.fn>);
       expect(url.pathname).toBe('/api/v1/search');
       expect(url.searchParams.get('q')).toBe('test');
       expect(url.searchParams.get('type')).toBe('person');
@@ -55,7 +59,7 @@ describe('api-client', () => {
     it('omits undefined params', async () => {
       await search({ q: 'hello' });
 
-      const url = new URL((fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+      const url = parseFetchUrl(fetch as ReturnType<typeof vi.fn>);
       expect(url.searchParams.has('type')).toBe(false);
       expect(url.searchParams.has('sector')).toBe(false);
     });
@@ -69,13 +73,13 @@ describe('api-client', () => {
       const res = await getEntity('abc-123');
       expect(res.data.canonical_name).toBe('Smith');
 
-      const url = new URL((fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+      const url = parseFetchUrl(fetch as ReturnType<typeof vi.fn>);
       expect(url.pathname).toBe('/api/v1/entities/abc-123');
     });
 
     it('encodes id with special characters', async () => {
       await getEntity('a/b c');
-      const url = new URL((fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+      const url = parseFetchUrl(fetch as ReturnType<typeof vi.fn>);
       expect(url.pathname).toContain('a%2Fb%20c');
     });
   });
@@ -87,7 +91,7 @@ describe('api-client', () => {
 
       await getDashboard('ent-1', { start_date: '2024-01-01', end_date: '2024-12-31' });
 
-      const url = new URL((fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+      const url = parseFetchUrl(fetch as ReturnType<typeof vi.fn>);
       expect(url.pathname).toBe('/api/v1/entities/ent-1/dashboard');
       expect(url.searchParams.get('start_date')).toBe('2024-01-01');
       expect(url.searchParams.get('end_date')).toBe('2024-12-31');
@@ -100,7 +104,7 @@ describe('api-client', () => {
 
       await getDonations('ent-1', { direction: 'received', min_amount: 1000, page: 3 });
 
-      const url = new URL((fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+      const url = parseFetchUrl(fetch as ReturnType<typeof vi.fn>);
       expect(url.pathname).toBe('/api/v1/entities/ent-1/donations');
       expect(url.searchParams.get('direction')).toBe('received');
       expect(url.searchParams.get('min_amount')).toBe('1000');
@@ -114,7 +118,7 @@ describe('api-client', () => {
 
       await getLobbying('ent-1', { page: 2, page_size: 10 });
 
-      const url = new URL((fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+      const url = parseFetchUrl(fetch as ReturnType<typeof vi.fn>);
       expect(url.pathname).toBe('/api/v1/entities/ent-1/lobbying');
       expect(url.searchParams.get('page')).toBe('2');
       expect(url.searchParams.get('page_size')).toBe('10');
@@ -127,7 +131,7 @@ describe('api-client', () => {
 
       await getVotes('ent-1');
 
-      const url = new URL((fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+      const url = parseFetchUrl(fetch as ReturnType<typeof vi.fn>);
       expect(url.pathname).toBe('/api/v1/entities/ent-1/votes');
     });
   });

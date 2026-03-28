@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api/v1';
 
 export interface PaginationMeta {
   request_id: string;
@@ -197,15 +197,16 @@ class ApiClientError extends Error {
 }
 
 function buildUrl(path: string, params?: Record<string, unknown>): string {
-  const url = new URL(`${API_BASE}${path}`);
-  if (params) {
-    for (const [key, value] of Object.entries(params)) {
-      if (value !== undefined && value !== null && value !== '') {
-        url.searchParams.set(key, String(value));
-      }
+  const base = `${API_BASE}${path}`;
+  if (!params) return base;
+  const sp = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') {
+      sp.set(key, String(value));
     }
   }
-  return url.toString();
+  const qs = sp.toString();
+  return qs ? `${base}?${qs}` : base;
 }
 
 async function fetchApi<T>(path: string, params?: Record<string, unknown>): Promise<ApiResponse<T>> {
