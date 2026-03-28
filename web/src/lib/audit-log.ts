@@ -5,6 +5,8 @@
  * Entries can be synced to the server API via POST /ai/query.
  */
 
+import type { AuditLogPayload } from './api-client';
+
 // ============================================================
 // TYPES
 // ============================================================
@@ -187,7 +189,7 @@ export async function countAuditEntries(): Promise<number> {
 /**
  * Build an audit entry payload for server sync.
  */
-export function toServerPayload(entry: AuditEntry): Record<string, unknown> {
+export function toServerPayload(entry: AuditEntry): AuditLogPayload {
   return {
     natural_language_query: entry.natural_language_query,
     generated_query: entry.generated_query,
