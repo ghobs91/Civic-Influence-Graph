@@ -2,12 +2,14 @@ FROM node:20-slim AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY packages/schema/package.json packages/schema/
+COPY packages/p2p-protocol/package.json packages/p2p-protocol/
 COPY services/api/package.json services/api/
-RUN npm install --workspace=@cig/schema --workspace=@cig/api
+RUN npm install --workspace=@cig/schema --workspace=@cig/p2p-protocol --workspace=@cig/api
 COPY tsconfig.json ./
 COPY packages/schema/ packages/schema/
+COPY packages/p2p-protocol/ packages/p2p-protocol/
 COPY services/api/ services/api/
-RUN npm run build --workspace=@cig/schema && npm run build --workspace=@cig/api
+RUN npm run build --workspace=@cig/schema && npm run build --workspace=@cig/p2p-protocol && npm run build --workspace=@cig/api
 
 FROM node:20-slim
 WORKDIR /app
@@ -15,8 +17,10 @@ ENV NODE_ENV=production
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/packages/schema/package.json packages/schema/
 COPY --from=builder /app/packages/schema/dist packages/schema/dist
+COPY --from=builder /app/packages/p2p-protocol/package.json packages/p2p-protocol/
+COPY --from=builder /app/packages/p2p-protocol/dist packages/p2p-protocol/dist
 COPY --from=builder /app/services/api/package.json services/api/
 COPY --from=builder /app/services/api/dist services/api/dist
-RUN npm install --workspace=@cig/schema --workspace=@cig/api --omit=dev
+RUN npm install --workspace=@cig/schema --workspace=@cig/p2p-protocol --workspace=@cig/api --omit=dev
 EXPOSE 3001
 CMD ["node", "services/api/dist/server.js"]
