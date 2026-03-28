@@ -177,7 +177,7 @@ export async function handleMessage(
 
 async function getLastRefreshTime(): Promise<number> {
   const result = await chrome.storage.local.get('lastRefresh');
-  return result.lastRefresh ?? 0;
+  return (result.lastRefresh as number) ?? 0;
 }
 
 async function setLastRefreshTime(time: number): Promise<void> {

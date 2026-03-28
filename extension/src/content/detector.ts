@@ -202,6 +202,6 @@ export async function init(): Promise<void> {
 }
 
 // Auto-run when injected (but only in actual browser context)
-if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+if (typeof chrome !== 'undefined' && typeof chrome.runtime?.sendMessage === 'function') {
   init();
 }

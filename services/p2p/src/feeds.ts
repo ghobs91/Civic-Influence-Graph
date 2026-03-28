@@ -54,7 +54,7 @@ export async function initFeeds(storagePath: string): Promise<FeedSet> {
 
   await Promise.all([entities.ready(), relationships.ready()]);
 
-  const snapshots = new Hyperdrive(store, null, { name: FEED_NAMES.SNAPSHOTS });
+  const snapshots = new Hyperdrive(store, { name: FEED_NAMES.SNAPSHOTS });
   await snapshots.ready();
 
   feedSet = { store, entities, relationships, changelog: changelogCore, snapshots };

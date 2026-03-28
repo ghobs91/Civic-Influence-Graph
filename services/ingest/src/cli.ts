@@ -26,7 +26,6 @@ import {
   parseFecDate,
   parseFecAmount,
   mapTransactionType,
-  FEC_COLUMNS,
   type FecRecord,
 } from './pipelines/fec-parse.js';
 import { filterToCanonical } from './pipelines/fec-amendments.js';
@@ -143,21 +142,22 @@ export async function stageParse(
     const yy = cycle.slice(-2);
     // After download + unzip, the extracted file is named e.g. cn24.txt
     const filePath = path.join(cycleDir, `${fileType}${yy}.txt`);
-    const columns = FEC_COLUMNS[fileType];
     const records: FecRecord[] = [];
 
     console.log(`Parsing ${FEC_FILE_DESCRIPTIONS[fileType]} (${filePath})...`);
 
-    await parseFile(filePath, columns, {
-      onRecord: (record) => {
+    await parseFile(
+      filePath,
+      fileType,
+      (record) => {
         records.push(record);
       },
-      onProgress: (progress) => {
-        if (progress.linesProcessed % 100_000 === 0) {
-          console.log(`  ${progress.linesProcessed} lines processed...`);
+      (progress) => {
+        if (progress.linesRead % 100_000 === 0) {
+          console.log(`  ${progress.linesRead} lines processed...`);
         }
       },
-    });
+    );
 
     // Validate and filter
     let validationErrors = 0;
@@ -194,7 +194,7 @@ export async function stageLoad(
   console.log('Loading data into PostgreSQL...');
 
   // Build candidate lookup for entity resolution
-  const lookupCandidates: CandidateLookup = async (_type, _name, _sourceIds) => {
+  const lookupCandidates: CandidateLookup = async (_name: string, _sourceIds: Array<{ source: string; external_id: string }>) => {
     // For initial bulk load, we use a simplified lookup:
     // we match by source_ids JSONB containment
     return [];
@@ -251,8 +251,10 @@ export async function stageLoad(
   console.log(`  Processing ${cclRecords.length} linkages...`);
 
   // Build ID maps for linkage resolution
-  const candidateIdMap = await buildCandidateIdMap(pool);
-  const committeeIdMap = await buildCommitteeIdMap(pool);
+  const mapClient = await pool.connect();
+  const candidateIdMap = await buildCandidateIdMap(mapClient);
+  const committeeIdMap = await buildCommitteeIdMap(mapClient);
+  mapClient.release();
 
   const client3 = await pool.connect();
   try {

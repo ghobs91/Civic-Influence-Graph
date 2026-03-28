@@ -17,9 +17,9 @@ export function Popup() {
 
   useEffect(() => {
     // Load any active entity summary from background worker
-    chrome.storage.session.get('activeSummary', (result) => {
+    chrome.storage.session.get('activeSummary', (result: Record<string, unknown>) => {
       if (result.activeSummary) {
-        setSummary(result.activeSummary);
+        setSummary(result.activeSummary as SummaryCardProps);
       }
       setLoading(false);
     });
