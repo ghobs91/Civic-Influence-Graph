@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: apache/age:v1.5.0-pg16
+    image: apache/age:dev_snapshot_PG16
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-cig}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
