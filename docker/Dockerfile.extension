@@ -1,0 +1,15 @@
+FROM node:20-slim AS builder
+WORKDIR /app
+COPY package.json package-lock.json* ./
+COPY packages/schema/package.json packages/schema/
+COPY extension/package.json extension/
+RUN npm install --workspace=@cig/schema --workspace=@cig/extension
+COPY tsconfig.json ./
+COPY packages/schema/ packages/schema/
+COPY extension/ extension/
+RUN npm run build --workspace=@cig/schema && npm run build --workspace=@cig/extension
+
+# Final stage — minimal image with just the built extension.
+FROM alpine:3.20
+WORKDIR /extension
+COPY --from=builder /app/extension/dist ./

@@ -1,0 +1,4 @@
+# Root-level wrapper — delegates to docker/docker-compose.yml so that
+# `docker compose up` works from the repo root without -f.
+include:
+  - path: docker/docker-compose.yml

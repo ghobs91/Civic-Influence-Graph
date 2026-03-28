@@ -1,0 +1,125 @@
+services:
+  postgres:
+    image: apache/age:v1.5.0-pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cig}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-cig}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./postgres/init-age.sql:/docker-entrypoint-initdb.d/02-init-age.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cig}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  opensearch:
+    image: opensearchproject/opensearch:2.18.0
+    environment:
+      - discovery.type=single-node
+      - DISABLE_SECURITY_PLUGIN=true
+      - OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}
+    ports:
+      - "${OPENSEARCH_PORT:-9200}:9200"
+    volumes:
+      - osdata:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    ports:
+      - "${API_PORT:-3001}:3001"
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-cig}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-cig}
+      - OPENSEARCH_HOST=opensearch
+      - OPENSEARCH_PORT=9200
+      - API_PORT=3001
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
+      - EXPORT_API_KEYS=${EXPORT_API_KEYS:-}
+      - SAVED_QUERY_BEARER_TOKENS=${SAVED_QUERY_BEARER_TOKENS:-}
+      - P2P_DATA_DIR=${P2P_DATA_DIR:-/data/corestore}
+      - P2P_ADMIN_URL=http://p2p:3002
+    volumes:
+      - p2pdata:/data/corestore
+    depends_on:
+      postgres:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+      p2p:
+        condition: service_started
+
+  ingest:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ingest
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-cig}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-cig}
+      - OPENSEARCH_HOST=opensearch
+      - OPENSEARCH_PORT=9200
+      - FEC_API_KEY=${FEC_API_KEY:-DEMO_KEY}
+      - CIG_JURISDICTIONS=${CIG_JURISDICTIONS:-federal}
+      - CIG_ELECTION_CYCLES=${CIG_ELECTION_CYCLES:-2024,2026}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+
+  p2p:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.p2p
+    command: ["node", "services/p2p/dist/cli.js", "serve"]
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-cig}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-cig}
+      - P2P_DATA_DIR=/data/corestore
+      - P2P_ADMIN_PORT=3002
+    volumes:
+      - p2pdata:/data/corestore
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.web
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://api:3001/api/v1
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  osdata:
+  p2pdata:

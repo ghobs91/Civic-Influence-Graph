@@ -1,0 +1,18 @@
+{
+  "name": "@cig/search",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/client.ts"
+  },
+  "dependencies": {
+    "@cig/schema": "*",
+    "@opensearch-project/opensearch": "^2.12.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,766 @@
+openapi: '3.1.0'
+info:
+  title: Civic Influence Graph API
+  version: 0.1.0
+  description: |
+    RESTful JSON API for the Civic Influence Graph platform.
+    All responses include provenance metadata. No identity-based targeting filters
+    are exposed. Authentication required only for write operations and bulk exports.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: /api/v1
+    description: Default API base path
+
+# ------------------------------------------------------------------
+# Common components
+# ------------------------------------------------------------------
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    apiKeyAuth:
+      type: http
+      scheme: bearer
+      description: API key passed as Bearer token
+
+  schemas:
+    PaginationMeta:
+      type: object
+      properties:
+        request_id: { type: string, format: uuid }
+        timestamp: { type: string, format: date-time }
+        data_snapshot: { type: string, nullable: true, format: date-time }
+        total_count: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            request_id: { type: string, format: uuid }
+
+    SearchResult:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        entity_type: { type: string }
+        canonical_name: { type: string }
+        name_variants: { type: array, items: { type: string } }
+        jurisdiction: { type: string, nullable: true }
+        party: { type: string, nullable: true }
+        roles:
+          type: array
+          items:
+            type: object
+            properties:
+              role: { type: string }
+              body: { type: string }
+              state: { type: string }
+        relevance_score: { type: number }
+
+    DashboardData:
+      type: object
+      properties:
+        entity:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            canonical_name: { type: string }
+            entity_type: { type: string }
+        funding_summary:
+          type: object
+          properties:
+            total_received: { type: number }
+            total_given: { type: number }
+            by_sector: { type: array, items: { type: object } }
+            top_counterparties: { type: array, items: { type: object } }
+        lobbying_summary:
+          type: object
+          properties:
+            engagements_mentioning: { type: integer }
+            top_clients: { type: array, items: { type: object } }
+            top_issues: { type: array, items: { type: string } }
+        voting_summary:
+          type: object
+          properties:
+            total_votes: { type: integer }
+            by_party_alignment:
+              type: object
+              properties:
+                with_party: { type: integer }
+                against_party: { type: integer }
+            recent_votes: { type: array, items: { type: object } }
+
+    Donation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        source_entity: { type: object }
+        destination_entity: { type: object }
+        amount: { type: number }
+        transaction_date: { type: string, format: date }
+        transaction_type: { type: string, nullable: true }
+        election_cycle: { type: string }
+        filing_id: { type: string, nullable: true }
+        source_system: { type: string }
+        source_record_id: { type: string, nullable: true }
+
+    GraphNode:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: string }
+        name: { type: string }
+        properties: { type: object }
+
+    GraphEdge:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        source: { type: string, format: uuid }
+        target: { type: string, format: uuid }
+        label: { type: string }
+        properties: { type: object }
+
+    AuditLogEntry:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        timestamp: { type: string, format: date-time }
+        natural_language_query: { type: string }
+        generated_query: { type: string }
+        query_params: { type: object }
+        model_id: { type: string }
+        model_version: { type: string }
+        result_count: { type: integer }
+        client_info: { type: object }
+
+    SnapshotSummary:
+      type: object
+      properties:
+        id: { type: string }
+        created_at: { type: string, format: date-time }
+        election_cycles: { type: array, items: { type: string } }
+        data_sources: { type: array, items: { type: string } }
+        record_counts: { type: object }
+        format: { type: string }
+        size_bytes: { type: integer }
+        download_url: { type: string }
+        change_log_url: { type: string }
+
+    SavedQuery:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        query_type: { type: string, enum: [graph, search, table] }
+        query_config: { type: object }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    BallotRace:
+      type: object
+      properties:
+        office: { type: string }
+        candidates:
+          type: array
+          items:
+            type: object
+            properties:
+              entity_id: { type: string, format: uuid }
+              name: { type: string }
+              party: { type: string, nullable: true }
+              incumbent: { type: boolean }
+              summary:
+                type: object
+                properties:
+                  total_raised: { type: number }
+                  top_sectors: { type: array, items: { type: object } }
+                  top_donors: { type: array, items: { type: object } }
+
+    ReplicationFeed:
+      type: object
+      properties:
+        name: { type: string }
+        public_key: { type: string }
+        topic: { type: string }
+        length: { type: integer }
+        seeding: { type: boolean }
+        peers: { type: integer }
+        bytes_uploaded: { type: integer }
+        last_sync: { type: string, format: date-time }
+
+# ------------------------------------------------------------------
+# Paths
+# ------------------------------------------------------------------
+paths:
+  /search:
+    get:
+      summary: Full-text entity search
+      tags: [Search]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 500 }
+        - name: type
+          in: query
+          schema: { type: string, enum: [person, committee, organization, bill] }
+        - name: jurisdiction
+          in: query
+          schema: { type: string }
+        - name: sector
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+      responses:
+        '200':
+          description: Successful search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      results:
+                        type: array
+                        items: { $ref: '#/components/schemas/SearchResult' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        '400': { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /entities/{id}:
+    get:
+      summary: Get entity by ID
+      tags: [Entities]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Entity detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: object }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /entities/{id}/dashboard:
+    get:
+      summary: Dashboard aggregation for entity
+      tags: [Entities]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: start_date
+          in: query
+          schema: { type: string, format: date }
+        - name: end_date
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/DashboardData' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+
+  /entities/{id}/donations:
+    get:
+      summary: Paginated donation records
+      tags: [Entities]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: direction
+          in: query
+          schema: { type: string, enum: [received, given] }
+        - name: start_date
+          in: query
+          schema: { type: string, format: date }
+        - name: end_date
+          in: query
+          schema: { type: string, format: date }
+        - name: min_amount
+          in: query
+          schema: { type: number }
+        - name: sector
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, default: 20, maximum: 500 }
+      responses:
+        '200':
+          description: Donation records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      donations:
+                        type: array
+                        items: { $ref: '#/components/schemas/Donation' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+
+  /entities/{id}/lobbying:
+    get:
+      summary: Lobbying engagements for entity
+      tags: [Entities]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: Lobbying engagements
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: object }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+
+  /entities/{id}/votes:
+    get:
+      summary: Roll-call votes for legislator
+      tags: [Entities]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: Vote records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: object }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+
+  /graph/query:
+    post:
+      summary: Execute filtered graph query
+      tags: [Graph]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                center_entity_id: { type: string, format: uuid }
+                depth: { type: integer, default: 2 }
+                filters:
+                  type: object
+                  properties:
+                    start_date: { type: string, format: date }
+                    end_date: { type: string, format: date }
+                    sectors: { type: array, items: { type: string } }
+                    min_amount: { type: number }
+                    edge_types: { type: array, items: { type: string } }
+                    jurisdictions: { type: array, items: { type: string } }
+                max_nodes: { type: integer, default: 200 }
+      responses:
+        '200':
+          description: Graph nodes and edges
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      nodes:
+                        type: array
+                        items: { $ref: '#/components/schemas/GraphNode' }
+                      edges:
+                        type: array
+                        items: { $ref: '#/components/schemas/GraphEdge' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+
+  /graph/table:
+    get:
+      summary: Flat table of graph edges for export
+      tags: [Graph]
+      parameters:
+        - name: center_entity_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: start_date
+          in: query
+          schema: { type: string, format: date }
+        - name: end_date
+          in: query
+          schema: { type: string, format: date }
+        - name: sectors
+          in: query
+          schema: { type: string }
+        - name: min_amount
+          in: query
+          schema: { type: number }
+        - name: edge_types
+          in: query
+          schema: { type: string }
+        - name: format
+          in: query
+          schema: { type: string, enum: [json, csv], default: json }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, default: 20, maximum: 1000 }
+      responses:
+        '200':
+          description: Table rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: object }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+
+  /ai/audit-log:
+    get:
+      summary: AI query audit log
+      tags: [AI]
+      parameters:
+        - name: start_date
+          in: query
+          schema: { type: string, format: date-time }
+        - name: end_date
+          in: query
+          schema: { type: string, format: date-time }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      entries:
+                        type: array
+                        items: { $ref: '#/components/schemas/AuditLogEntry' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+    post:
+      summary: Create AI audit log entry
+      tags: [AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuditLogEntry' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/AuditLogEntry' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+
+  /ballot/races:
+    get:
+      summary: Ballot races for an address
+      tags: [Ballot]
+      parameters:
+        - name: address
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 500 }
+        - name: state
+          in: query
+          schema: { type: string, maxLength: 2 }
+      responses:
+        '200':
+          description: Ballot race data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      races:
+                        type: array
+                        items: { $ref: '#/components/schemas/BallotRace' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        '400': { description: Validation error or state not found }
+
+  /export/snapshots:
+    get:
+      summary: List available bulk export snapshots
+      tags: [Export]
+      responses:
+        '200':
+          description: Snapshot list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      snapshots:
+                        type: array
+                        items: { $ref: '#/components/schemas/SnapshotSummary' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+    post:
+      summary: Generate a new snapshot
+      tags: [Export]
+      security:
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: Snapshot generated
+        '401': { description: Unauthorized }
+
+  /export/snapshots/{id}/download:
+    get:
+      summary: Download a bulk snapshot
+      tags: [Export]
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Snapshot data
+        '401': { description: Unauthorized }
+        '404': { description: Not found }
+
+  /export/snapshots/{id}/changelog:
+    get:
+      summary: Changelog between this and previous snapshot
+      tags: [Export]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Changelog data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      changelog:
+                        type: object
+                        properties:
+                          added: { type: integer }
+                          updated: { type: integer }
+                          removed: { type: integer }
+                          unchanged: { type: integer }
+                          entries: { type: array, items: { type: object } }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        '404': { description: Not found }
+
+  /saved-queries:
+    post:
+      summary: Create a saved query
+      tags: [Saved Queries]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, query_type, query_config]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 200 }
+                query_type: { type: string, enum: [graph, search, table] }
+                query_config: { type: object }
+      responses:
+        '201':
+          description: Saved query created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/SavedQuery' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        '401': { description: Unauthorized }
+        '400': { description: Validation error }
+
+  /saved-queries/{id}:
+    get:
+      summary: Retrieve a saved query
+      tags: [Saved Queries]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Saved query data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/SavedQuery' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        '404': { description: Not found }
+
+  /saved-queries/{id}/execute:
+    get:
+      summary: Re-execute a saved query against current data
+      tags: [Saved Queries]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Execution results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      saved_query: { $ref: '#/components/schemas/SavedQuery' }
+                      results: { type: object }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        '404': { description: Not found }
+
+  /replication/feeds:
+    get:
+      summary: List P2P feeds
+      tags: [Replication]
+      responses:
+        '200':
+          description: Feed list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      feeds:
+                        type: array
+                        items: { $ref: '#/components/schemas/ReplicationFeed' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+
+  /replication/feeds/{name}/seed:
+    post:
+      summary: Start or stop seeding a feed
+      tags: [Replication]
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action: { type: string, enum: [start, stop] }
+      responses:
+        '200': { description: Seed status updated }
+
+  /replication/feeds/follow:
+    post:
+      summary: Follow a remote feed
+      tags: [Replication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [public_key]
+              properties:
+                public_key: { type: string }
+                mode: { type: string, enum: [full, sparse-jurisdiction, sparse-entity-set, snapshot-only] }
+                jurisdiction: { type: string }
+      responses:
+        '200': { description: Following remote feed }

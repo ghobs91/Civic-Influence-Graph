@@ -1,0 +1,22 @@
+FROM node:20-slim AS builder
+WORKDIR /app
+COPY package.json package-lock.json* ./
+COPY packages/schema/package.json packages/schema/
+COPY services/api/package.json services/api/
+RUN npm install --workspace=@cig/schema --workspace=@cig/api
+COPY tsconfig.json ./
+COPY packages/schema/ packages/schema/
+COPY services/api/ services/api/
+RUN npm run build --workspace=@cig/schema && npm run build --workspace=@cig/api
+
+FROM node:20-slim
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/packages/schema/package.json packages/schema/
+COPY --from=builder /app/packages/schema/dist packages/schema/dist
+COPY --from=builder /app/services/api/package.json services/api/
+COPY --from=builder /app/services/api/dist services/api/dist
+RUN npm install --workspace=@cig/schema --workspace=@cig/api --omit=dev
+EXPOSE 3001
+CMD ["node", "services/api/dist/server.js"]

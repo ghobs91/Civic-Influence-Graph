@@ -1,0 +1,26 @@
+FROM node:20-slim AS builder
+RUN apt-get update && apt-get install -y build-essential python3 && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY package.json package-lock.json* ./
+COPY packages/schema/package.json packages/schema/
+COPY packages/entity-resolution/package.json packages/entity-resolution/
+COPY services/ingest/package.json services/ingest/
+RUN npm install --workspace=@cig/schema --workspace=@cig/entity-resolution --workspace=@cig/ingest
+COPY tsconfig.json ./
+COPY packages/schema/ packages/schema/
+COPY packages/entity-resolution/ packages/entity-resolution/
+COPY services/ingest/ services/ingest/
+RUN npm run build --workspace=@cig/schema && npm run build --workspace=@cig/entity-resolution && npm run build --workspace=@cig/ingest
+
+FROM node:20-slim
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/packages/schema/package.json packages/schema/
+COPY --from=builder /app/packages/schema/dist packages/schema/dist
+COPY --from=builder /app/packages/entity-resolution/package.json packages/entity-resolution/
+COPY --from=builder /app/packages/entity-resolution/dist packages/entity-resolution/dist
+COPY --from=builder /app/services/ingest/package.json services/ingest/
+COPY --from=builder /app/services/ingest/dist services/ingest/dist
+RUN npm install --workspace=@cig/schema --workspace=@cig/entity-resolution --workspace=@cig/ingest --omit=dev
+CMD ["node", "services/ingest/dist/cli.js"]
