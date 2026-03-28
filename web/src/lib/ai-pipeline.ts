@@ -6,8 +6,8 @@
  * generated Cypher query for execution against the API.
  */
 
-import type { ChatMessage } from './webllm.js';
-import { chatCompletion } from './webllm.js';
+import type { ChatMessage } from './webllm';
+import { chatCompletion } from './webllm';
 
 // ============================================================
 // TYPES

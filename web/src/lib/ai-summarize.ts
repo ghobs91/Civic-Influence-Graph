@@ -6,9 +6,9 @@
  * no identity-based targeting, no recommendations.
  */
 
-import type { ChatMessage } from './webllm.js';
-import { chatCompletion, chatCompletionStream } from './webllm.js';
-import type { GraphNode, GraphEdge, TableRow } from './api-client.js';
+import type { ChatMessage } from './webllm';
+import { chatCompletion, chatCompletionStream } from './webllm';
+import type { GraphNode, GraphEdge, TableRow } from './api-client';
 
 // ============================================================
 // TYPES
