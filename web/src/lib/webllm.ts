@@ -75,15 +75,15 @@ export async function initEngine(
     try {
       onProgress?.({ stage: 'downloading', progress: 0, message: 'Initializing model...' });
 
-      const engine = new webllm.MLCEngine();
-
-      await engine.reload(modelId, {
+      const engine = new webllm.MLCEngine({
         initProgressCallback: (report: webllm.InitProgressReport) => {
           const progress = report.progress ?? 0;
           const stage = progress < 1 ? 'downloading' : 'loading';
           onProgress?.({ stage, progress, message: report.text });
         },
       });
+
+      await engine.reload(modelId);
 
       engineInstance = engine;
       currentModelId = modelId;
