@@ -23,4 +23,4 @@ COPY --from=builder /app/packages/entity-resolution/dist packages/entity-resolut
 COPY --from=builder /app/services/ingest/package.json services/ingest/
 COPY --from=builder /app/services/ingest/dist services/ingest/dist
 RUN npm install --workspace=@cig/schema --workspace=@cig/entity-resolution --workspace=@cig/ingest --omit=dev
-CMD ["node", "services/ingest/dist/cli.js"]
+ENTRYPOINT ["node", "services/ingest/dist/cli.js"]
