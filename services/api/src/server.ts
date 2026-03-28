@@ -126,3 +126,8 @@ export async function startServer(): Promise<void> {
 
   await server.listen({ host, port });
 }
+
+startServer().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
