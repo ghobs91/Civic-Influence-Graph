@@ -187,6 +187,7 @@ export async function stageParse(
 export async function stageLoad(
   parsed: Map<FecFileType, FecRecord[]>,
   pool: pg.Pool,
+  cycle: string = '2024',
 ): Promise<PipelineStats> {
   const stats = emptyStats();
 
@@ -248,13 +249,18 @@ export async function stageLoad(
   // Phase 3: Process linkages (ccl records)
   const cclRecords = parsed.get('ccl') ?? [];
   console.log(`  Processing ${cclRecords.length} linkages...`);
+
+  // Build ID maps for linkage resolution
+  const candidateIdMap = await buildCandidateIdMap(pool);
+  const committeeIdMap = await buildCommitteeIdMap(pool);
+
   const client3 = await pool.connect();
   try {
     await client3.query('BEGIN');
 
     for (const record of cclRecords) {
-      await processLinkage(client3, record);
-      stats.linkages_loaded++;
+      const linked = await processLinkage(client3, record, candidateIdMap, committeeIdMap);
+      if (linked) stats.linkages_loaded++;
     }
 
     await client3.query('COMMIT');
@@ -278,7 +284,14 @@ export async function stageLoad(
 
       for (const record of canonical) {
         try {
-          await insertDonation(donationClient, record);
+          // Determine source entity from record type
+          const sourceId = record.OTHER_ID || record.CMTE_ID || '';
+          const sourceType: 'person' | 'committee' | 'organization' =
+            fileType === 'indiv' ? 'person' : 'committee';
+          const destCommitteeId = record.CMTE_ID || '';
+          const donationCycle = record.ELECTION_CYCLE || cycle;
+
+          await insertDonation(donationClient, record, sourceId, sourceType, destCommitteeId, donationCycle);
           stats.donations_loaded++;
         } catch {
           // Skip records that fail (e.g., missing date)
@@ -307,13 +320,10 @@ export async function stageIndex(
 ): Promise<number> {
   console.log('Indexing entities into OpenSearch...');
 
-  // Dynamic import to avoid hard dependency on @opensearch-project/opensearch
-  const { indexAllEntities } = await import('../../search/src/indexer.js');
-
-  // indexAllEntities needs a pg.Pool and OpenSearch client — those are created
-  // internally by the search service. For now we just log that this stage
-  // would be executed.
-  console.log('  OpenSearch indexing requires running services. Use: npm run index');
+  // The search service indexer is a separate service — invoke via its API
+  // rather than importing cross-service source files.
+  console.log(`  OpenSearch indexing requires the search service. Use: npm run index (in services/search)`);
+  console.log(`  OpenSearch URL: ${opensearchUrl}`);
   return 0;
 }
 
@@ -371,7 +381,7 @@ export async function main(argv: string[]): Promise<void> {
       const parsed = await stageParse(opts.cycle, opts.dataDir);
       const pool = new pg.Pool({ connectionString: opts.dbUrl });
       try {
-        const stats = await stageLoad(parsed, pool);
+        const stats = await stageLoad(parsed, pool, opts.cycle);
         console.log('Load complete:', stats);
       } finally {
         await pool.end();
@@ -399,7 +409,7 @@ export async function main(argv: string[]): Promise<void> {
       // Stage 3: Load
       const pool = new pg.Pool({ connectionString: opts.dbUrl });
       try {
-        const stats = await stageLoad(parsed, pool);
+        const stats = await stageLoad(parsed, pool, opts.cycle);
         console.log('Load stats:', stats);
       } finally {
         await pool.end();
