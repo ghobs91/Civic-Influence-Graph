@@ -38,7 +38,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.api
     ports:
-      - "${API_PORT:-3001}:3001"
+      - "${API_PORT:-3101}:3001"
     environment:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
