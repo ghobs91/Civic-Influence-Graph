@@ -14,6 +14,7 @@ import { registerBallotRoutes } from './routes/ballot.js';
 import { registerExportRoutes } from './routes/export.js';
 import { registerSavedQueryRoutes } from './routes/saved-queries.js';
 import { registerReplicationRoutes } from './routes/replication.js';
+import { registerLeaderboardRoute } from './routes/leaderboard.js';
 import { createReplicationAdapter, createNoopReplication } from './services/replication-adapter.js';
 
 export async function buildServer(): Promise<FastifyInstance> {
@@ -120,6 +121,7 @@ export async function startServer(): Promise<void> {
   registerBallotRoutes(server, { pool });
   registerExportRoutes(server, { pool, apiKeys });
   registerSavedQueryRoutes(server, { pool, bearerTokens });
+  registerLeaderboardRoute(server, { pool });
 
   // Replication routes — proxy to P2P admin server when configured.
   const p2pAdminUrl = process.env.P2P_ADMIN_URL;

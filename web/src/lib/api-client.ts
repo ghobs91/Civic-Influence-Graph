@@ -425,4 +425,32 @@ export async function postAuditLog(
   return res.json();
 }
 
+// ============================================================
+// LEADERBOARD
+// ============================================================
+
+export interface LeaderboardEntry {
+  entity_id: string;
+  entity_type: string;
+  name: string;
+  committee_type: string | null;
+  total_amount: number;
+  donation_count: number;
+}
+
+export interface LeaderboardParams {
+  start_date?: string;
+  end_date?: string;
+  election_cycle?: string;
+  entity_type?: string;
+  committee_type?: string;
+  limit?: number;
+}
+
+export async function getLeaderboard(
+  params?: LeaderboardParams,
+): Promise<ApiResponse<{ entries: LeaderboardEntry[] }>> {
+  return fetchApi('/leaderboard', params ? toParams(params) : {});
+}
+
 export { ApiClientError };
