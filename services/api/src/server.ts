@@ -6,6 +6,7 @@ import { Client as OpenSearchClient } from '@opensearch-project/opensearch';
 import type { ApiError } from '@cig/schema';
 import { getPool } from './db.js';
 import { registerSearchRoute } from './routes/search.js';
+import { bootstrapSearchIndex } from './services/search-bootstrap.js';
 import { registerEntityRoutes } from './routes/entities.js';
 import { registerGraphRoutes } from './routes/graph.js';
 import { registerAIRoutes } from './routes/ai.js';
@@ -107,6 +108,9 @@ export async function startServer(): Promise<void> {
 
   const apiKeys = new Set((process.env.EXPORT_API_KEYS || '').split(',').filter(Boolean));
   const bearerTokens = new Set((process.env.SAVED_QUERY_BEARER_TOKENS || '').split(',').filter(Boolean));
+
+  // --- Bootstrap OpenSearch index ---
+  await bootstrapSearchIndex(opensearch, server.log);
 
   // --- Register all routes ---
   registerSearchRoute(server, { opensearch });

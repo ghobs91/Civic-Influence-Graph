@@ -82,15 +82,37 @@ export function registerSearchRoute(server: FastifyInstance, deps: SearchDeps): 
     const params = parsed.data;
 
     const searchBody = buildSearchQuery(params);
-    const { body } = await deps.opensearch.search({
-      index: CIG_ENTITIES_INDEX,
-      body: searchBody,
-    });
 
+    let body: Record<string, unknown>;
+    try {
+      const res = await deps.opensearch.search({
+        index: CIG_ENTITIES_INDEX,
+        body: searchBody,
+      });
+      body = res.body;
+    } catch (err: unknown) {
+      // If the index doesn't exist yet, return empty results instead of 500.
+      if (
+        err instanceof Error &&
+        'meta' in err &&
+        (err as { meta?: { body?: { error?: { type?: string } } } }).meta?.body?.error?.type ===
+          'index_not_found_exception'
+      ) {
+        const meta = buildMeta(request, {
+          total_count: 0,
+          page: params.page,
+          page_size: params.page_size,
+        });
+        return sendResponse(reply, { results: [] }, meta);
+      }
+      throw err;
+    }
+
+    const hits = body.hits as { total: number | { value: number }; hits: Array<{ _id: string; _source: Record<string, unknown>; _score: number }> };
     const total =
-      typeof body.hits.total === 'number' ? body.hits.total : body.hits.total?.value ?? 0;
+      typeof hits.total === 'number' ? hits.total : hits.total?.value ?? 0;
 
-    const results = (body.hits.hits as Array<{ _id: string; _source: Record<string, unknown>; _score: number }>).map(
+    const results = hits.hits.map(
       (hit) => ({
         id: hit._source.id ?? hit._id,
         entity_type: hit._source.entity_type,
